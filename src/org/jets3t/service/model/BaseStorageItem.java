@@ -42,6 +42,7 @@ public abstract class BaseStorageItem {
     public static final String METADATA_HEADER_CONTENT_DISPOSITION = "Content-Disposition";
     public static final String METADATA_HEADER_CONTENT_LANGUAGE = "Content-Language";
     public static final String METADATA_HEADER_ETAG = "ETag";
+    public static final String METADATA_HEADER_ETAG_MINIO = "Etag";
 
     /*
      * Metadata names common to S3 and Google Storage.

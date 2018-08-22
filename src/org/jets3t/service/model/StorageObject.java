@@ -300,6 +300,12 @@ public class StorageObject extends BaseStorageItem implements Cloneable {
      */
     public String getETag() {
         String etag = (String) getMetadata(METADATA_HEADER_ETAG);
+
+        // Minio sends this header as 'Etag' instead of 'ETag'
+        if(etag == null) {
+            etag = (String) getMetadata(METADATA_HEADER_ETAG_MINIO);
+        }
+
         if (etag != null) {
             if (etag.startsWith("\"") && etag.endsWith("\"")) {
                 return etag.substring(1, etag.length() -1);
