@@ -18,6 +18,18 @@
  */
 package org.jets3t.service.utils;
 
+import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+import org.jets3t.service.Constants;
+import org.jets3t.service.ServiceException;
+import org.jets3t.service.model.S3Object;
+import org.xml.sax.SAXException;
+import org.xml.sax.XMLReader;
+import org.xml.sax.helpers.XMLReaderFactory;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -45,19 +57,6 @@ import java.util.SimpleTimeZone;
 import java.util.StringTokenizer;
 import java.util.regex.Pattern;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.jets3t.service.Constants;
-import org.jets3t.service.ServiceException;
-import org.jets3t.service.model.S3Object;
-import org.xml.sax.SAXException;
-import org.xml.sax.XMLReader;
-import org.xml.sax.helpers.XMLReaderFactory;
-
 /**
  * General utility methods used throughout the jets3t project.
  *
@@ -78,9 +77,13 @@ public class ServiceUtils {
     protected static final SimpleDateFormat rfc822DateParser = new SimpleDateFormat(
         "EEE, dd MMM yyyy HH:mm:ss z", Locale.US);
 
+    protected static final SimpleDateFormat rfc822DateParserB = new SimpleDateFormat(
+            "EEE MMM dd kk:mm:ss z yyyy", Locale.US);
+
     static {
         iso8601DateParser.setTimeZone(new SimpleTimeZone(0, "GMT"));
         rfc822DateParser.setTimeZone(new SimpleTimeZone(0, "GMT"));
+        rfc822DateParserB.setTimeZone(new SimpleTimeZone(0, "GMT"));
     }
 
     public static Date parseIso8601Date(String dateString) throws ParseException {
@@ -113,6 +116,12 @@ public class ServiceUtils {
     public static Date parseRfc822Date(String dateString) throws ParseException {
         synchronized (rfc822DateParser) {
             return rfc822DateParser.parse(dateString);
+        }
+    }
+
+    public static Date parseRfc822BDate(String dateString) throws ParseException {
+        synchronized (rfc822DateParserB) {
+            return rfc822DateParserB.parse(dateString);
         }
     }
 
@@ -447,47 +456,6 @@ public class ServiceUtils {
                 String key = entry.getKey();
                 Object value = entry.getValue();
 
-                // Convert connection header string Collections into simple strings (where
-                // appropriate)
-                if (value instanceof Collection) {
-                    Collection<?> coll = (Collection<?>) value;
-                    if (coll.size() == 1) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Converted metadata single-item Collection "
-                                + coll.getClass() + " " + coll + " for key: " + key);
-                        }
-                        value = coll.iterator().next();
-                    } else {
-                        if (log.isWarnEnabled()) {
-                            log.warn("Collection " + coll
-                                + " has too many items to convert to a single string");
-                        }
-                    }
-                }
-
-                // Parse date strings into Date objects, if necessary.
-                if ("Date".equals(key) || "Last-Modified".equals(key)) {
-                    if (!(value instanceof Date)) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Parsing date string '" + value
-                            + "' into Date object for key: " + key);
-                        }
-                        try {
-                            value = ServiceUtils.parseRfc822Date(value.toString());
-                        } catch (ParseException pe) {
-                            // Try ISO-8601 date format, just in case
-                            try {
-                                value = ServiceUtils.parseIso8601Date(value.toString());
-                            } catch (ParseException pe2) {
-                                // Log original exception if the work-around fails.
-                                if (log.isWarnEnabled()) {
-                                    log.warn("Date string is not RFC 822 compliant for metadata field " + key, pe);
-                                }
-                            }
-                        }
-                    }
-                }
-
                 // Recognize user/headers metadata items
                 String keyStr = (key != null ? key.toString() : "");
                 completeMetadataMap.put(keyStr, value);
@@ -534,6 +502,51 @@ public class ServiceUtils {
                         log.debug("Ignoring metadata item: " + keyStr + "=" + value);
                     }
                     continue;
+                }
+
+                // Convert connection header string Collections into simple strings (where
+                // appropriate)
+                if (value instanceof Collection) {
+                    Collection<?> coll = (Collection<?>) value;
+                    if (coll.size() == 1) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Converted metadata single-item Collection "
+                                    + coll.getClass() + " " + coll + " for key: " + key);
+                        }
+                        value = coll.iterator().next();
+                    } else {
+                        if (log.isWarnEnabled()) {
+                            log.warn("Collection " + coll
+                                    + " has too many items to convert to a single string");
+                        }
+                    }
+                }
+
+                // Parse date strings into Date objects, if necessary.
+                if ("Date".equals(key) || "Last-Modified".equals(key)) {
+                    if (!(value instanceof Date)) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Parsing date string '" + value
+                                    + "' into Date object for key: " + key);
+                        }
+                        try {
+                            value = ServiceUtils.parseRfc822Date(value.toString());
+                        } catch (ParseException pe) {
+                            try {
+                                value = ServiceUtils.parseRfc822BDate(value.toString());
+                            } catch (ParseException pe2) {
+                                // Try ISO-8601 date format, just in case
+                                try {
+                                    value = ServiceUtils.parseIso8601Date(value.toString());
+                                } catch (ParseException pe3) {
+                                    // Log original exception if the work-around fails.
+                                    if (log.isWarnEnabled()) {
+                                        log.warn("Date string is not RFC 822 compliant for metadata field " + key, pe);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 combinedMap.put(key, value);
